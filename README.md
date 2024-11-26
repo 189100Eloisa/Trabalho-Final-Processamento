@@ -1,5 +1,6 @@
 # Trabalho-Final-Processamento
 
-colocamos no drive da UPF, pois o arquivo era muito grande para compratilhar aqui. 
-Segue aqui o link para o trabalho final completo: https://drive.google.com/file/d/17sNZ4Nc8K1XuSiDM29NSjWNqh1Oh3816/view?usp=sharing 
+O dataset utilizado para a realização desde trabalho está disponivel em: https://www.kaggle.com/datasets/marquis03/cats-and-dogs
+O trabalho completo está disponivel em: https://drive.google.com/file/d/1rGXX6emzstas2f_PBwRsYFSmWDDqruWz/view?usp=sharing 
+
 
