@@ -4,11 +4,12 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 from torch.utils.data import DataLoader, Dataset
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from torch.optim import lr_scheduler
 import time
 import copy
 import logging
+import matplotlib.pyplot as plt  
 
 # Configuração do log
 LOG_FILE = "training_log.txt"
@@ -20,12 +21,14 @@ logging.basicConfig(level=logging.INFO,
                     ])
 
 # Definição do número de épocas
-NUM_EPOCHS = 3  # Ajuste para o número desejado de épocas
+NUM_EPOCHS = 10  # Aumentar o número de épocas para análise de desempenho a longo prazo
 
-# Transformações do PyTorch
+# Transformações do PyTorch com Data Augmentation
 data_transforms = {
     'train': transforms.Compose([
-        transforms.Resize((224, 224)),  # Adiciona o redimensionamento para 224x224
+        transforms.RandomResizedCrop(224),  # Recorte aleatório para aumentar a diversidade
+        transforms.RandomHorizontalFlip(),  # Flip horizontal aleatório
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Aumentar a variedade de cor
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
@@ -91,11 +94,21 @@ class CustomImageDataset(Dataset):
             return image, label
         except Exception as e:
             logging.error(f"Erro ao processar a imagem: {img_path}. Erro: {e}")
-            raise RuntimeError(f"Erro ao processar a imagem: {img_path}") from e
+            # Criar uma imagem em branco com um ponto de interrogação
+            blank_image = Image.new('RGB', (224, 224), color='white')
+            draw = ImageDraw.Draw(blank_image)
+            try:
+                font = ImageFont.load_default()
+            except:
+                font = None
+            draw.text((75, 100), "?", fill='black', font=font)
+            if self.transform:
+                blank_image = self.transform(blank_image)
+            return blank_image, -1  # Retorna -1 para indicar que o rótulo é desconhecido
 
 # Função personalizada para lidar com erros no DataLoader
 def collate_fn(batch):
-    batch = [b for b in batch if b is not None]  # Remove None
+    batch = [b for b in batch if b[0] is not None]  # Remove None
     return torch.utils.data.default_collate(batch)
 
 # Configurações de treino e validação
@@ -113,7 +126,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 weights = models.ResNet18_Weights.DEFAULT
 model = models.resnet18(weights=weights)
 num_ftrs = model.fc.in_features
-model.fc = nn.Linear(num_ftrs, 2)  # Classificação binária (cães e gatos)
+
+# Adicionar Dropout ao modelo
+model.fc = nn.Sequential(
+    nn.Dropout(0.5),  # Dropout de 50%
+    nn.Linear(num_ftrs, 2)  # Classificação binária (cães e gatos)
+)
+
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
@@ -121,9 +140,14 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
 # Função de treinamento
-def train_model(model, criterion, optimizer, scheduler, train_loader, val_loader, num_epochs=3):
+def train_model(model, criterion, optimizer, scheduler, train_loader, val_loader, num_epochs=10):
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+
+    train_accuracies = []
+    val_accuracies = []
+    train_losses = []
+    val_losses = []
 
     for epoch in range(num_epochs):
         logging.info(f'Epoch {epoch + 1}/{num_epochs}')
@@ -139,7 +163,7 @@ def train_model(model, criterion, optimizer, scheduler, train_loader, val_loader
 
             running_loss = 0.0
             running_corrects = 0
-            total_batches = len(loader)
+            total_samples = 0
 
             for i, (inputs, labels) in enumerate(loader):
                 inputs = inputs.to(device)
@@ -157,17 +181,26 @@ def train_model(model, criterion, optimizer, scheduler, train_loader, val_loader
                         optimizer.step()
 
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                running_corrects += torch.sum(preds == labels.data).item()
+                total_samples += inputs.size(0)
 
-                logging.info(f'{phase} {i + 1}/{total_batches} Loss: {loss.item():.4f}')
+                if i % 10 == 0 or i == len(loader) - 1:
+                    logging.info(f'{phase} {i + 1}/{len(loader)} Loss: {loss.item():.4f}')
 
             if phase == 'train':
                 scheduler.step()
 
-            epoch_loss = running_loss / len(loader.dataset)
-            epoch_acc = running_corrects.double() / len(loader.dataset)
+            epoch_loss = running_loss / total_samples
+            epoch_acc = running_corrects / total_samples
 
             logging.info(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+
+            if phase == 'train':
+                train_accuracies.append(epoch_acc)
+                train_losses.append(epoch_loss)
+            else:
+                val_accuracies.append(epoch_acc)
+                val_losses.append(epoch_loss)
 
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
@@ -175,9 +208,55 @@ def train_model(model, criterion, optimizer, scheduler, train_loader, val_loader
 
     logging.info(f'Best val Acc: {best_acc:.4f}')
     model.load_state_dict(best_model_wts)
+
+    # Gráfico de acurácia e perda
+    epochs_range = range(1, num_epochs + 1)
+    plt.figure(figsize=(14, 5))
+
+    # Subplot para Acurácia
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_range, train_accuracies, label='Acurácia de Treinamento')
+    plt.plot(epochs_range, val_accuracies, label='Acurácia de Validação')
+    plt.xlabel('Épocas')
+    plt.ylabel('Acurácia')
+    plt.ylim(0, 1)  # Limitar entre 0 e 1 para melhor visualização
+    plt.title('Acurácia de Treinamento e Validação por Época')
+    plt.legend()
+    plt.grid()
+
+    # Subplot para Perda
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_range, train_losses, label='Perda de Treinamento')
+    plt.plot(epochs_range, val_losses, label='Perda de Validação')
+    plt.xlabel('Épocas')
+    plt.ylabel('Perda')
+    plt.title('Perda de Treinamento e Validação por Época')
+    plt.legend()
+    plt.grid()
+
+    plt.tight_layout()
+    plt.savefig('training_validation_metrics.png')
+    plt.show()
+
     return model
 
 # Iniciar treinamento
 if __name__ == "__main__":
     model = train_model(model, criterion, optimizer, scheduler, train_loader, val_loader, num_epochs=NUM_EPOCHS)
     torch.save(model.state_dict(), 'best_model.pth')
+
+# Ajustar o carregamento do modelo para a interface gráfica
+def load_classification_model():
+    model = models.resnet18(weights=None)
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Sequential(
+        nn.Dropout(0.5),  # Dropout de 50%
+        nn.Linear(num_ftrs, 2)  # Classificação binária (cães e gatos)
+    )
+    model = model.to(device)
+
+    # Carregar pesos do modelo treinado
+    model_path = 'best_model.pth'
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+    return model
