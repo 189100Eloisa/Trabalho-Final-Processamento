@@ -6,7 +6,6 @@ from torchvision import models, transforms
 from torch.utils.data import DataLoader, Dataset
 from PIL import Image, ImageDraw, ImageFont
 from torch.optim import lr_scheduler
-import time
 import copy
 import logging
 import matplotlib.pyplot as plt  
@@ -16,24 +15,24 @@ LOG_FILE = "training_log.txt"
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(message)s',
                     handlers=[
-                        logging.StreamHandler(),  # Exibe no terminal
-                        logging.FileHandler(LOG_FILE)  # Grava no arquivo
+                        logging.StreamHandler(),  
+                        logging.FileHandler(LOG_FILE) 
                     ])
 
 # Definição do número de épocas
-NUM_EPOCHS = 10  # Aumentar o número de épocas para análise de desempenho a longo prazo
+NUM_EPOCHS = 10  
 
 # Transformações do PyTorch com Data Augmentation
 data_transforms = {
     'train': transforms.Compose([
-        transforms.RandomResizedCrop(224),  # Recorte aleatório para aumentar a diversidade
-        transforms.RandomHorizontalFlip(),  # Flip horizontal aleatório
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Aumentar a variedade de cor
+        transforms.RandomResizedCrop(224),  
+        transforms.RandomHorizontalFlip(),  
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), 
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
     'val': transforms.Compose([
-        transforms.Resize((224, 224)),  # Adiciona o redimensionamento para 224x224
+        transforms.Resize((224, 224)),  
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
@@ -71,30 +70,18 @@ class CustomImageDataset(Dataset):
         label = self.labels[idx]
 
         try:
-            # Converter o caminho para Unicode
-            img_path = os.path.normpath(img_path)  # Normaliza o caminho para evitar problemas com caracteres especiais
-
-            # Ler a imagem com OpenCV
+            img_path = os.path.normpath(img_path)  
             image = cv2.imread(img_path)
-
-            # Verificar se a imagem foi carregada corretamente
             if image is None:
                 raise ValueError(f"Erro ao carregar imagem {img_path}")
-
-            # Converter imagem para RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-            # Converter imagem para PIL para poder aplicar transformações do PyTorch
             pil_image = Image.fromarray(image_rgb)
-
-            # Aplicar transformações do PyTorch
             if self.transform:
                 image = self.transform(pil_image)
 
             return image, label
         except Exception as e:
             logging.error(f"Erro ao processar a imagem: {img_path}. Erro: {e}")
-            # Criar uma imagem em branco com um ponto de interrogação
             blank_image = Image.new('RGB', (224, 224), color='white')
             draw = ImageDraw.Draw(blank_image)
             try:
@@ -104,11 +91,11 @@ class CustomImageDataset(Dataset):
             draw.text((75, 100), "?", fill='black', font=font)
             if self.transform:
                 blank_image = self.transform(blank_image)
-            return blank_image, -1  # Retorna -1 para indicar que o rótulo é desconhecido
+            return blank_image, -1  
 
 # Função personalizada para lidar com erros no DataLoader
 def collate_fn(batch):
-    batch = [b for b in batch if b[0] is not None]  # Remove None
+    batch = [b for b in batch if b[0] is not None] 
     return torch.utils.data.default_collate(batch)
 
 # Configurações de treino e validação
@@ -129,8 +116,8 @@ num_ftrs = model.fc.in_features
 
 # Adicionar Dropout ao modelo
 model.fc = nn.Sequential(
-    nn.Dropout(0.5),  # Dropout de 50%
-    nn.Linear(num_ftrs, 2)  # Classificação binária (cães e gatos)
+    nn.Dropout(0.5),  
+    nn.Linear(num_ftrs, 2)  
 )
 
 model = model.to(device)
@@ -219,7 +206,7 @@ def train_model(model, criterion, optimizer, scheduler, train_loader, val_loader
     plt.plot(epochs_range, val_accuracies, label='Acurácia de Validação')
     plt.xlabel('Épocas')
     plt.ylabel('Acurácia')
-    plt.ylim(0, 1)  # Limitar entre 0 e 1 para melhor visualização
+    plt.ylim(0, 1)
     plt.title('Acurácia de Treinamento e Validação por Época')
     plt.legend()
     plt.grid()
@@ -250,8 +237,8 @@ def load_classification_model():
     model = models.resnet18(weights=None)
     num_ftrs = model.fc.in_features
     model.fc = nn.Sequential(
-        nn.Dropout(0.5),  # Dropout de 50%
-        nn.Linear(num_ftrs, 2)  # Classificação binária (cães e gatos)
+        nn.Dropout(0.5),  
+        nn.Linear(num_ftrs, 2) 
     )
     model = model.to(device)
 
