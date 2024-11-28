@@ -12,17 +12,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Carregar o modelo de classificação
 def load_classification_model():
-    model = models.resnet18(weights=None)  # Utilizar weights=None em vez de pretrained=False
+    model = models.resnet18(weights=None)  
     num_ftrs = model.fc.in_features
-    # Adicionar Dropout para coincidir com o modelo treinado
     model.fc = nn.Sequential(
-        nn.Dropout(0.6),  # Dropout de 50%
-        nn.Linear(num_ftrs, 2)  # Classificação binária: Cachorro e Gato
+        nn.Dropout(0.6),  
+        nn.Linear(num_ftrs, 2) 
     )
     model = model.to(device)
 
-    # Carregar pesos do modelo treinado
-    model_path = 'best_model.pth'  # Caminho do seu modelo de classificação treinado
+    model_path = 'best_model.pth'  
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     return model
@@ -30,7 +28,7 @@ def load_classification_model():
 classification_model = load_classification_model()
 
 # Carregar o modelo de detecção YOLO
-yolo_model = YOLO("yolov5su.pt")  # YOLO pré-treinado (model 'u' para melhor desempenho)
+yolo_model = YOLO("yolov5su.pt")  
 
 # Transformações para pré-processamento da imagem
 transform = transforms.Compose([
@@ -55,43 +53,34 @@ def predict_image(image):
 
 # Função para processar a imagem e exibir os resultados
 def process_image(image_path):
-    # Carregar a imagem
     image = cv2.imread(image_path)
     if image is None:
         return None, "Erro ao carregar a imagem."
 
-    # Detecção de objetos com YOLO
     results = yolo_model(image)
 
-    # Copiar imagem para exibição com as caixas desenhadas
     annotated_image = image.copy()
 
-    # Iterar pelos objetos detectados
-    for result in results:  # Cada `result` contém os dados de um frame (imagem)
-        boxes = result.boxes  # Caixas delimitadoras
-        for box in boxes:  # Iterar por cada objeto detectado
-            x1, y1, x2, y2 = map(int, box.xyxy[0])  # Coordenadas da caixa
-            conf = box.conf[0]  # Confiança da detecção
-            cls = int(box.cls[0])  # Classe YOLO (não usamos aqui para classificar diretamente)
-
-            # Cortar o objeto detectado para classificação
+    for result in results:  
+        boxes = result.boxes  
+        for box in boxes:  
+            x1, y1, x2, y2 = map(int, box.xyxy[0])  
+            conf = box.conf[0]  
+            cls = int(box.cls[0])  
+            
             cropped_object = image[y1:y2, x1:x2]
-
-            # Classificar o objeto detectado (Cachorro ou Gato)
+           
             class_name = predict_image(cropped_object)
-
-            # Definir a cor da caixa com base na classe detectada
+            
             if class_name == 'Cachorro':
-                color = (0, 0, 255)  # Vermelho para cachorro
+                color = (0, 0, 255)  
             elif class_name == 'Gato':
-                color = (255, 0, 0)  # Azul para gato
+                color = (255, 0, 0)  
             else:
-                color = (0, 255, 0)  # Verde para outros casos (se algum objeto não for cachorro ou gato)
-
-            # Desenhar retângulo na imagem
+                color = (0, 255, 0)  
+           
             cv2.rectangle(annotated_image, (x1, y1), (x2, y2), color, 2)
             
-            # Mudar a posição do texto para aparecer acima da caixa delimitadora
             text_position = (x1, y1 - 10) if y1 > 30 else (x1, y1 + 20)
             cv2.putText(annotated_image, f"{class_name} ({conf:.2f})",
                         text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
@@ -100,7 +89,6 @@ def process_image(image_path):
 
 # Função para redimensionar a imagem para um tamanho adequado
 def resize_image_for_display(image, max_width=800, max_height=600):
-    # Obter as dimensões da imagem original
     height, width, _ = image.shape
     ratio = min(max_width / width, max_height / height)
     new_width = int(width * ratio)
@@ -112,7 +100,7 @@ def resize_image_for_display(image, max_width=800, max_height=600):
 def select_image():
     file_path = filedialog.askopenfilename(filetypes=[("Image files", ".jpg;.jpeg;*.png")])
     if not file_path:
-        return  # O usuário cancelou a seleção
+        return  
 
     progress_label.config(text="Processando... Por favor, aguarde.")
     processed_image, error = process_image(file_path)
@@ -125,11 +113,10 @@ def select_image():
     processed_image_rgb = cv2.cvtColor(processed_image_resized, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(processed_image_rgb)
 
-    # Exibir imagem no label com transição suave (fade-in effect)
     photo = ImageTk.PhotoImage(pil_image)
     image_label.config(image=photo)
     image_label.image = photo
-    image_label.after(500, lambda: image_label.config(image=photo))  # Fade-in effect
+    image_label.after(500, lambda: image_label.config(image=photo))  
 
     result_text = "Objetos detectados:\n"
     results = yolo_model(processed_image)
@@ -145,8 +132,7 @@ def select_image():
     result_label.config(text=result_text)
     progress_label.config(text="Processamento concluído.")
     
-    # Exibir o botão de trocar imagem após carregar a imagem
-    change_button.grid(row=1, column=0, pady=10, sticky="ew")  # Mostra o botão diretamente
+    change_button.grid(row=1, column=0, pady=10, sticky="ew")  
 
 # Função para trocar a imagem
 def change_image():
